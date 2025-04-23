@@ -14,8 +14,8 @@ set_determinism(42)
 # 参数设置
 image_dir = "dataset/images"
 mask_dir = "dataset/masks"
-num_epochs = 10
-lr = 5e-4
+num_epochs = 25
+lr = 1e-4
 batch_size = 4
 image_size = (512, 512)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -23,6 +23,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # 数据加载
 train_loader = get_weld_dataset(image_dir, mask_dir, image_size, batch_size)
 for batch in train_loader:
+    
+    print(type(batch))  # 应该是 dict
+    print(batch["image"].shape)  # 应该是 (B, 1, H, W)
     masks = batch["mask"]
     print("Mean mask value:", masks.mean().item())
     break
@@ -56,11 +59,6 @@ for epoch in range(num_epochs):
 
     print(f"Epoch {epoch+1} - Loss: {epoch_loss / len(train_loader):.4f}")
 
-    # 🎯 验证（可选）
-    # model.eval()
-    # with torch.no_grad():
-    #     for batch in val_loader:
-    #         ...
     
 
 # 保存模型
