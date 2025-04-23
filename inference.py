@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import cv2
 # 参数
 MODEL_PATH = "weld_seg_unet.pth"
-IMAGE_PATH = "dataset/images/8.png"  # 1 15no 8
+IMAGE_PATH = "dataset/images/1.png"  # 1 15no 8
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 加载灰度图 & 保存为临时文件（PIL） → 确保单通道
@@ -44,7 +44,7 @@ with torch.no_grad():
         image = batch["image"].to(DEVICE)
         output = model(image)
         pred = torch.sigmoid(output).squeeze().cpu().numpy()
-        binary_mask = (pred > 0.5).astype(np.uint8)# 转置后添加垂直翻转（上下颠倒修正）
+        binary_mask = (pred > 0.51).astype(np.uint8)# 转置后添加垂直翻转（上下颠倒修正）
 corrected_mask = binary_mask.T
   # 或 np.flip(corrected_mask, axis=0)
 corrected_mask = corrected_mask * 255
@@ -84,26 +84,31 @@ cropped_original = center_crop(original, 512)
 prob_map = (pred * 255).astype(np.uint8)  # 保留置信度
 prob_map = prob_map.T
 # ================= 可视化 ==================
-plt.figure(figsize=(12, 4))
+plt.figure(figsize=(12, 12))
+plt.subplots_adjust(wspace=0.1, hspace=0.1)
 
-plt.subplot(1, 4, 1)
+plt.subplot(2, 2, 1)
 plt.imshow(cropped_original, cmap="gray")
 plt.title("Original Image")
 plt.axis("off")
 
-plt.subplot(1, 4, 2)
+plt.subplot(2, 2, 2)
 plt.imshow(prob_map, cmap="gray")
 plt.title("Probability Map")
 plt.axis("off")
 
-plt.subplot(1, 4, 3)
+plt.subplot(2, 2, 3)
 plt.imshow(final_mask, cmap="gray")
 plt.title("Denoised Binary Mask")
 plt.axis("off")
 
-plt.subplot(1, 4, 4)
+overlay = np.zeros((final_mask.shape[0], final_mask.shape[1], 4), dtype=np.float32)
+overlay[..., 0] = 7.0  
+overlay[..., 1] = 7.0  
+overlay[..., 3] = 0.3 * final_mask.astype(np.float32)  
+plt.subplot(2, 2, 4)
 plt.imshow(cropped_original, cmap="gray")
-plt.imshow(final_mask, cmap="Reds", alpha=0.3)
+plt.imshow(overlay, interpolation="none")
 plt.title("Overlay")
 plt.axis("off")
 
