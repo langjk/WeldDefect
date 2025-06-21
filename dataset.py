@@ -1,3 +1,4 @@
+# dataset.py
 import os
 from glob import glob
 import torch
@@ -27,10 +28,10 @@ def get_weld_dataset(image_dir, mask_dir, image_size=(512, 512), batch_size=4, n
         RandCropByPosNegLabeld(
             keys=["image", "mask"],
             label_key="mask",
-            spatial_size=(128, 128),
-            pos=1,   # 正样本比例（有掩膜的）
+            spatial_size=(256, 256),
+            pos=2,   # 正样本比例（有掩膜的）
             neg=1,   # 负样本比例
-            num_samples=8,  # 每对图像掩膜裁剪几个 patch
+            num_samples=16,  # 每对图像掩膜裁剪几个 patch
             image_key="image",
             image_threshold=0
         ),

@@ -3,3 +3,4 @@ dataset
 *.png
 *.pth
 __pycache__
+viz
