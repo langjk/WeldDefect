@@ -11,10 +11,11 @@ from sklearn.model_selection import train_test_split
 from glob import glob
 from torch.utils.data import DataLoader
 from monai.data import Dataset, list_data_collate
-from monai.data import list_data_collate 
-from dataset import get_weld_dataset  # 可保留用于加载 transforms
-from model import get_unet_model
-from losses import DiceFocalLoss
+
+from dataset import get_weld_dataset
+from losses import DiceTverskyLoss
+from monai.networks.nets import BasicUNetPlusPlus
+from torch.cuda.amp import autocast, GradScaler
 
 set_determinism(42)
 
@@ -23,9 +24,9 @@ set_determinism(42)
 # -------------------
 image_dir = "dataset/images"
 mask_dir = "dataset/masks"
-num_epochs = 25
+num_epochs = 50
 lr = 1e-4
-batch_size = 4
+batch_size = 1 
 image_size = (512, 512)
 num_workers = 0
 
@@ -40,7 +41,6 @@ mask_paths = [os.path.join(mask_dir, os.path.basename(p).replace(".png", "_mask.
 data_dicts = [{"image": img, "mask": msk} for img, msk in zip(image_paths, mask_paths)]
 train_dicts, val_dicts = train_test_split(data_dicts, test_size=0.2, random_state=42)
 
-# 使用已有 transforms
 transforms = get_weld_dataset(image_dir, mask_dir, image_size, batch_size).dataset.transform
 train_ds = Dataset(data=train_dicts, transform=transforms)
 val_ds = Dataset(data=val_dicts, transform=transforms)
@@ -50,9 +50,16 @@ val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=0, coll
 # -------------------
 # 模型 + 损失 + 优化器
 # -------------------
-model = get_unet_model().to(device)
-criterion = DiceFocalLoss()
+model = BasicUNetPlusPlus(
+    spatial_dims=2,
+    in_channels=1,
+    out_channels=1,
+    features = (16, 32, 64, 128, 256, 512)
+).to(device)
+
+criterion = DiceTverskyLoss(alpha=0.7, beta=0.3)
 optimizer = Adam(model.parameters(), lr=lr)
+scaler = GradScaler()
 dice_metric = DiceMetric(include_background=False, reduction="mean")
 inferer = SimpleInferer()
 post_pred = AsDiscrete(threshold=0.5)
@@ -70,12 +77,21 @@ for epoch in range(num_epochs):
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
 
-        outputs = model(images)
-        loss = criterion(outputs, masks)
-
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+
+        # 自动混合精度上下文
+        with autocast():
+            outputs = model(images)
+            
+            if isinstance(outputs, list):  # 若模型有多输出
+                outputs = outputs[0]
+            
+            loss = criterion(outputs, masks)
+
+        # 反向传播与优化
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         epoch_loss += loss.item()
         loop.set_postfix(loss=loss.item())
@@ -90,6 +106,9 @@ for epoch in range(num_epochs):
             val_images = val_batch["image"].to(device)
             val_labels = val_batch["mask"].to(device)
             val_outputs = model(val_images)
+
+            if isinstance(val_outputs, list):
+                val_outputs = val_outputs[0]
 
             val_outputs_bin = post_pred(val_outputs)
             val_labels_bin = post_label(val_labels)
@@ -118,8 +137,9 @@ for epoch in range(num_epochs):
 
     val_dice = dice_metric.aggregate().item()
     print(f"Epoch {epoch+1} - Validation Dice: {val_dice:.4f}")
+    torch.cuda.empty_cache()
 
 # -------------------
 # 保存模型
 # -------------------
-torch.save(model.state_dict(), "weld_seg_unet.pth")
+torch.save(model.state_dict(), "weld_seg_unetpp.pth")

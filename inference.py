@@ -90,26 +90,18 @@ prob_map = prob_map.T
 plt.figure(figsize=(12, 12))
 plt.subplots_adjust(wspace=0.1, hspace=0.1)
 
-plt.subplot(2, 2, 1)
+plt.subplot(1, 2, 1)
 plt.imshow(cropped_original, cmap="gray")
 plt.title("Original Image")
 plt.axis("off")
 
-plt.subplot(2, 2, 2)
-plt.imshow(prob_map, cmap="gray")
-plt.title("Probability Map")
-plt.axis("off")
 
-plt.subplot(2, 2, 3)
-plt.imshow(final_mask, cmap="gray")
-plt.title("Denoised Binary Mask")
-plt.axis("off")
 
 overlay = np.zeros((final_mask.shape[0], final_mask.shape[1], 4), dtype=np.float32)
 overlay[..., 0] = 7.0  
 overlay[..., 1] = 7.0  
 overlay[..., 3] = 0.3 * final_mask.astype(np.float32)  
-plt.subplot(2, 2, 4)
+plt.subplot(1, 2, 2)
 plt.imshow(cropped_original, cmap="gray")
 plt.imshow(overlay, interpolation="none")
 plt.title("Overlay")
