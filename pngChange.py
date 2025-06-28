@@ -2,13 +2,13 @@ import os
 from PIL import Image
 
 # 设置你的目标目录路径
-directory = "./renew"  # 替换为你的实际路径
+directory = "./fakeshow"  # 替换为你的实际路径
 
 # 初始化计数器
 counter = 1
 
 for filename in os.listdir(directory):
-    if filename.lower().endswith(".jpeg"):
+    if filename.lower().endswith(".tif"):
         # 获取文件路径
         old_path = os.path.join(directory, filename)
         

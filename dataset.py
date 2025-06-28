@@ -1,11 +1,14 @@
+# dataset.py
 import os
 from glob import glob
 import torch
 from torch.utils.data import DataLoader
-from monai.data import Dataset
+from monai.data import (Dataset, list_data_collate)
 from monai.transforms import (
-    Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd, Resized,
-    RandFlipd, RandRotate90d, RandZoomd, ToTensord, Lambdad, CenterSpatialCropd, RandCropByPosNegLabel
+    Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
+    RandFlipd, RandRotate90d, RandZoomd, RandAdjustContrastd, RandGaussianNoised,
+    RandGaussianSmoothd, RandShiftIntensityd, RandBiasFieldd, RandGridDistortiond,
+    ToTensord, Lambdad, RandCropByPosNegLabeld, EnsureTyped
 )
 
 
@@ -23,15 +26,39 @@ def get_weld_dataset(image_dir, mask_dir, image_size=(512, 512), batch_size=4, n
         Lambdad(keys=["mask"], func=lambda x: x / 255.0 if x.max() > 1 else x),
         EnsureChannelFirstd(keys=["image", "mask"]),
         ScaleIntensityd(keys=["image"]),
-        CenterSpatialCropd(keys=["image", "mask"], roi_size=(512, 512)),
-        Resized(keys=["image", "mask"], spatial_size=image_size),
+
+        RandCropByPosNegLabeld(
+            keys=["image", "mask"],
+            label_key="mask",
+            spatial_size=(256, 256),
+            pos=2, neg=1, num_samples=8,
+            image_key="image",
+            image_threshold=0
+        ),
+
+        # 🔁 几何变换增强
         RandFlipd(keys=["image", "mask"], spatial_axis=1, prob=0.5),
         RandRotate90d(keys=["image", "mask"], prob=0.5),
         RandZoomd(keys=["image", "mask"], min_zoom=0.9, max_zoom=1.1, prob=0.2),
-        ToTensord(keys=["image", "mask"])
+        RandGridDistortiond(keys=["image", "mask"], prob=0.15),
+
+        # 🌈 亮度对比度/模糊增强
+        RandAdjustContrastd(keys=["image"], prob=0.3, gamma=(0.7, 1.5)),
+        RandGaussianNoised(keys=["image"], prob=0.2, mean=0.0, std=0.05),
+        RandGaussianSmoothd(keys=["image"], prob=0.1, sigma_x=(0.5, 1.5)),
+
+        # 🧠 强度偏移/伪影模拟（可选）
+        RandShiftIntensityd(keys=["image"], offsets=0.1, prob=0.2),
+        RandBiasFieldd(keys=["image"], prob=0.1),
+
+        ToTensord(keys=["image", "mask"]),
+        EnsureTyped(keys=["image", "mask"]),
     ])
 
     dataset = Dataset(data=data_dicts, transform=transforms)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+        collate_fn=list_data_collate
+    )
 
     return dataloader

@@ -3,3 +3,6 @@ dataset
 *.png
 *.pth
 __pycache__
+viz
+*.zip
+fakeshow
