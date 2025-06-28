@@ -12,7 +12,7 @@ import cv2
 import numpy.ma as ma
 # 参数
 MODEL_PATH = "weld_seg_unet-Cut.pth"
-IMAGE_PATH = "dataset/images/1.png"  # 1 15no 8
+IMAGE_PATH = "dataset/images/8.png"  # 1 15no 8
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # 加载灰度图 & 保存为临时文件（PIL） → 确保单通道

@@ -4,3 +4,5 @@ dataset
 *.pth
 __pycache__
 viz
+*.zip
+fakeshow
