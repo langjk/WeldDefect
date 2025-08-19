@@ -47,27 +47,27 @@ with torch.no_grad():
         image = batch["image"].to(DEVICE)
         output = model(image)
         pred = torch.sigmoid(output).squeeze().cpu().numpy()
-        binary_mask = (pred > 0.9).astype(np.uint8)# 转置后添加垂直翻转（上下颠倒修正）
+        # 提高置信度阈值以减少假阳性
+        binary_mask = (pred > 0.8).astype(np.uint8)
+        
+# 转置后添加垂直翻转（上下颠倒修正）
 corrected_mask = binary_mask.T
-  # 或 np.flip(corrected_mask, axis=0)
 corrected_mask = corrected_mask * 255
 
-# 定义结构元素（调整 kernel_size 控制去噪力度）
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))  # 核越大去噪越强
+# 改进的形态学处理 - 使用更大的核
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
 
-# 开运算：先腐蚀后膨胀，去除小白点
-opened_mask = cv2.morphologyEx(corrected_mask, cv2.MORPH_OPEN, kernel)
+# 先闭运算填充空洞，再开运算去除噪声
+closed_mask = cv2.morphologyEx(corrected_mask, cv2.MORPH_CLOSE, kernel)
+opened_mask = cv2.morphologyEx(closed_mask, cv2.MORPH_OPEN, kernel)
 
-# 可选：闭运算填充小孔洞（若需要）
-closed_mask = cv2.morphologyEx(opened_mask, cv2.MORPH_CLOSE, kernel)
+final_mask = opened_mask
 
-# 转换回 0-1 二值图（根据显示需求决定是否需要）
-final_mask = closed_mask # 若需保持0-1则启用
 # 使用 connectedComponentsWithStats 进行连通区域分析
 num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(final_mask.astype(np.uint8), connectivity=8)
 
-# 过滤掉面积小于 10 的联通区域
-min_area = 20
+# 增加最小区域面积阈值以过滤更多噪声
+min_area = 50
 for i in range(1, num_labels):  # 从1开始，跳过背景（标签0）
     if stats[i, cv2.CC_STAT_AREA] < min_area:
         final_mask[labels == i] = 0  # 将面积小于10的区域设为0

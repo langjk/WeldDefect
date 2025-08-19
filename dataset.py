@@ -8,9 +8,28 @@ from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
     RandFlipd, RandRotate90d, RandZoomd, RandAdjustContrastd, RandGaussianNoised,
     RandGaussianSmoothd, RandShiftIntensityd, RandBiasFieldd, RandGridDistortiond,
-    ToTensord, Lambdad, RandCropByPosNegLabeld, EnsureTyped
+    ToTensord, RandCropByPosNegLabeld, EnsureTyped, RepeatChanneld, 
+    ScaleIntensityRanged, ThresholdIntensityd, Lambdad
 )
+import numpy as np
 
+# 全局定义的可序列化函数
+def rgb_to_grayscale_safe(x):
+    """安全的RGB转灰度函数，可被多进程序列化"""
+    if x.ndim == 3 and x.shape[0] == 3:  # RGB图像 (C, H, W)
+        # 使用标准的RGB权重转换为灰度
+        weights = np.array([0.299, 0.587, 0.114]).reshape(3, 1, 1)
+        return np.sum(x * weights, axis=0, keepdims=True)
+    elif x.ndim == 3 and x.shape[0] == 1:  # 已经是单通道
+        return x
+    elif x.ndim == 2:  # 2D灰度图
+        return x[np.newaxis, ...]  # 添加通道维度
+    else:
+        return x
+
+def normalize_mask_safe(x):
+    """安全的掩码归一化函数"""
+    return x / 255.0 if x.max() > 1 else x
 
 def get_weld_dataset(image_dir, mask_dir, image_size=(512, 512), batch_size=4, num_workers=0):
     image_paths = sorted(glob(os.path.join(image_dir, "*.png")))
@@ -22,34 +41,37 @@ def get_weld_dataset(image_dir, mask_dir, image_size=(512, 512), batch_size=4, n
 
     transforms = Compose([
         LoadImaged(keys=["image", "mask"]),
-        Lambdad(keys=["image"], func=lambda x: x.mean(axis=-1, keepdims=True) if x.ndim == 3 else x),
-        Lambdad(keys=["mask"], func=lambda x: x / 255.0 if x.max() > 1 else x),
         EnsureChannelFirstd(keys=["image", "mask"]),
+        
+        # RGB转灰度：使用全局定义的可序列化函数
+        Lambdad(keys=["image"], func=rgb_to_grayscale_safe),
+        
+        # 掩码归一化：使用全局定义的可序列化函数  
+        Lambdad(keys=["mask"], func=normalize_mask_safe),
+        
+        # 图像强度归一化
         ScaleIntensityd(keys=["image"]),
 
+        # 优化的困难负样本挖掘 - 减少采样数量以提高速度
         RandCropByPosNegLabeld(
             keys=["image", "mask"],
             label_key="mask",
             spatial_size=(256, 256),
-            pos=2, neg=1, num_samples=8,
+            pos=2, neg=1, num_samples=6,  # 减少到6个样本以提高速度
             image_key="image",
             image_threshold=0
         ),
 
-        # 🔁 几何变换增强
+        # 🔁 核心几何变换增强（保留最有效的）
         RandFlipd(keys=["image", "mask"], spatial_axis=1, prob=0.5),
         RandRotate90d(keys=["image", "mask"], prob=0.5),
-        RandZoomd(keys=["image", "mask"], min_zoom=0.9, max_zoom=1.1, prob=0.2),
-        RandGridDistortiond(keys=["image", "mask"], prob=0.15),
+        RandZoomd(keys=["image", "mask"], min_zoom=0.9, max_zoom=1.1, prob=0.15),
+        # 移除RandGridDistortiond（耗时且效果有限）
 
-        # 🌈 亮度对比度/模糊增强
-        RandAdjustContrastd(keys=["image"], prob=0.3, gamma=(0.7, 1.5)),
-        RandGaussianNoised(keys=["image"], prob=0.2, mean=0.0, std=0.05),
-        RandGaussianSmoothd(keys=["image"], prob=0.1, sigma_x=(0.5, 1.5)),
-
-        # 🧠 强度偏移/伪影模拟（可选）
-        RandShiftIntensityd(keys=["image"], offsets=0.1, prob=0.2),
-        RandBiasFieldd(keys=["image"], prob=0.1),
+        # 🌈 核心强度增强（降低概率以提高速度）
+        RandAdjustContrastd(keys=["image"], prob=0.2, gamma=(0.7, 1.5)),
+        RandGaussianNoised(keys=["image"], prob=0.15, mean=0.0, std=0.05),
+        # 移除一些耗时的增强
 
         ToTensord(keys=["image", "mask"]),
         EnsureTyped(keys=["image", "mask"]),

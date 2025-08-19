@@ -113,7 +113,8 @@ def evaluate_model(model_path, data_loader, device, use_sliding_window=False):
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
-    post_pred = AsDiscrete(threshold=0.5)
+    # 使用与inference.py相同的阈值设置
+    post_pred = AsDiscrete(threshold=0.8)  # 提高阈值减少假阳性
     post_label = AsDiscrete(threshold=0.5)
     
     all_dice = []
