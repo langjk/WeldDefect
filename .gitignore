@@ -8,5 +8,9 @@ viz
 fakeshow
 files
 usedPic
+<<<<<<< HEAD
 *.txt 
 .claude
+=======
+*.txt 
+>>>>>>> b44b5b4bad4aa27e96c91187128471609022a05e
